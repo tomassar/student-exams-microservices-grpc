@@ -112,3 +112,8 @@ func (repo *PostgresRepository) GetStudentsPerTest(ctx context.Context, testId s
 
 	return students, nil
 }
+
+func (repo *PostgresRepository) SetEnrollment(ctx context.Context, enrollment *models.Enrollment) error {
+	_, err := repo.db.ExecContext(ctx, "INSERT INTO enrollments (student_id, test_id) VALUES ($1, $2)", enrollment.StudentId, enrollment.TestId)
+	return err
+}
