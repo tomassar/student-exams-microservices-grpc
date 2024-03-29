@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/tomassar/protobuffers-grpc-go/testpb"
@@ -18,7 +20,7 @@ func main() {
 	defer cc.Close()
 
 	c := testpb.NewTestServiceClient(cc)
-	DoClientStreaming(c)
+	DoBidirectionalStreaming(c)
 }
 
 func DoUnary(c testpb.TestServiceClient) {
@@ -75,4 +77,72 @@ func DoClientStreaming(c testpb.TestServiceClient) {
 	}
 
 	log.Printf("SetQuestions Response: %v", res)
+}
+
+func DoServerStreaming(c testpb.TestServiceClient) {
+	req := &testpb.GetStudentsPerTestRequest{
+		TestId: "t3",
+	}
+
+	stream, err := c.GetStudentsPerTest(context.Background(), req)
+	if err != nil {
+		log.Fatalf("error while calling GetStudentsPerTest RPC: %v", err)
+	}
+
+	for {
+		res, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			log.Fatalf("error while receiving response: %v", err)
+			break
+		}
+
+		log.Printf("Response from GetStudentsPerTest: %v", res)
+	}
+}
+
+func DoBidirectionalStreaming(c testpb.TestServiceClient) {
+	answer := testpb.TakeTestRequest{
+		Answer: "2",
+	}
+
+	numberOfQuestions := 4
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	stream, err := c.TakeTest(context.Background())
+	if err != nil {
+		log.Fatalf("error while opening stream: %v", err)
+	}
+
+	go func() {
+		for i := 0; i < numberOfQuestions; i++ {
+			log.Printf("Sending answer: %v", &answer)
+			stream.Send(&answer)
+		}
+	}()
+
+	go func() {
+		for {
+			res, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				log.Fatalf("error while receiving response: %v", err)
+				break
+			}
+
+			log.Printf("Response from TakeTest: %v", res)
+		}
+
+		wg.Done()
+	}()
+
+	wg.Wait()
 }
